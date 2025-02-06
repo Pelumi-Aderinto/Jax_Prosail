@@ -134,7 +134,7 @@ def test_rsdt_prosail5(datadir):
     params_file = datadir("prosail_params.npy")
     rsdt_file = datadir("prosail_rsdt.npy")
     
-    tmpdir  = r"/home/yoel/Documents/Dev/PROSAIL-VAE/prosailpython/tests/data/"
+    tmpdir  = r"C:\Users\USER\Downloads\Pelumi_Solution_to_DL_Use_Case (1)\DL_use_case\Jax_Prosail\torch\tests\data\\"
     params_file = tmpdir + "prosail_params.npy"
     rsdt_file = tmpdir + "prosail_rsdt.npy"
     params = torch.from_numpy(np.load(params_file)).float()
@@ -215,7 +215,7 @@ def test_grad_prosail5(datadir):
     ).sum(),params)[0]
     assert not prosail_grad.isnan().any()
 
-tmpdir  = r"/home/yoel/Documents/Dev/PROSAIL-VAE/prosailpython/tests/data/"
+tmpdir  = r"C:\Users\USER\Downloads\Pelumi_Solution_to_DL_Use_Case (1)\DL_use_case\Jax_Prosail\torch\tests\data\\"
 params_file = tmpdir + "prosail_params.npy"
 rsdt_file = tmpdir + "prosail_rsdt.npy"
 params = torch.from_numpy(np.load(params_file)).float()
