@@ -8,7 +8,7 @@ from jax import jit
 from prosail import spectral_lib
 
 
-@jit
+
 def run_prospect(n, cab, car,  cbrown, cw, cm, ant=0.0, 
                  prospect_version="D",  
                  nr=None, kab=None, kcar=None, kbrown=None, kw=None, 
@@ -44,47 +44,61 @@ def run_prospect(n, cab, car,  cbrown, cw, cm, ant=0.0,
 
     return wv, refl, trans
 
+
 @jit
 def calctav(alpha, nr):
-    # Constants
+    """
+    Computes the TAV (transmittance) of a leaf layer given angle alpha (deg) 
+    and refractive index nr. Works for scalar or array inputs of matching shape.
+    """
+
+    # Squares and combined constants
     n2  = nr * nr
     npx = n2 + 1
     nm  = n2 - 1
     a   = (nr + 1) ** 2 / 2.0
     k   = -(n2 - 1) ** 2 / 4.0
+
+    # Sine of alpha (handling scalar or array alpha)
     sa  = jnp.sin(jnp.deg2rad(alpha))
 
-    # Use jax.lax.cond for conditional computation
-    b1 = lax.cond(
-        alpha != 90,
-        lambda _: jnp.sqrt((sa * sa - npx / 2) ** 2 + k),
-        lambda _: 0.0,
-        operand=None
-    )
+    # Instead of lax.cond, do an elementwise where for alpha != 90
+    # This way, if alpha is an array, we produce an array consistently.
+    expr = (sa * sa - npx / 2) ** 2 + k
+    sqrt_expr = jnp.sqrt(expr)
+
+    # b1 is sqrt_expr if alpha != 90, else 0.0
+    # jnp.where(...) returns the same shape as alpha/nr.
+    b1 = jnp.where(alpha != 90, sqrt_expr, 0.0)
 
     b2 = sa * sa - npx / 2
     b  = b1 - b2
     b3 = b ** 3
     a3 = a ** 3
 
-    # Compute ts
-    ts = (k**2 / (6 * b3) + k / b - b / 2) - (k**2 / (6 * a3) + k / a - a / 2)
+    # ts
+    ts = (k**2 / (6.0 * b3) + k / b - b / 2.0) - (
+        k**2 / (6.0 * a3) + k / a - a / 2.0
+    )
 
-    # Compute tp components
-    tp1 = -2 * n2 * (b - a) / (npx ** 2)
-    tp2 = -2 * n2 * npx * jnp.log(b / a) / (nm ** 2)
-    tp3 = n2 * (1 / b - 1 / a) / 2
-    tp4 = (16 * n2 ** 2 * (n2 ** 2 + 1) * 
-           jnp.log((2 * npx * b - nm ** 2) / (2 * npx * a - nm ** 2)) / 
-           (npx ** 3 * nm ** 2))
-    tp5 = (16 * n2 ** 3 * 
-           (1 / (2 * npx * b - nm ** 2) - 1 / (2 * npx * a - nm ** 2)) / 
-           (npx ** 3))
-    
+    # tp
+    tp1 = -2.0 * n2 * (b - a) / (npx ** 2)
+    tp2 = -2.0 * n2 * npx * jnp.log(b / a) / (nm ** 2)
+    tp3 = n2 * (1.0 / b - 1.0 / a) / 2.0
+    tp4 = (16.0 * n2**2 * (n2**2 + 1.0) *
+           jnp.log((2.0 * npx * b - nm**2) / (2.0 * npx * a - nm**2)) /
+           (npx**3 * nm**2))
+    tp5 = (16.0 * n2**3 *
+           (1.0 / (2.0 * npx * b - nm**2) - 1.0 / (2.0 * npx * a - nm**2)) /
+           (npx**3))
+
     tp  = tp1 + tp2 + tp3 + tp4 + tp5
-    tav = (ts + tp) / (2 * sa ** 2)
+
+    # Final TAV
+    tav = (ts + tp) / (2.0 * sa**2)
 
     return tav
+
 
 @jit
 def refl_trans_one_layer (alpha, nr, tau):
@@ -116,7 +130,7 @@ def refl_trans_one_layer (alpha, nr, tau):
     return r, t, Ra, Ta, denom
 
 
-@jit
+
 def prospect_d(N, cab, car, cbrown, cw, cm, ant,
                    nr, kab, kcar, kbrown, kw, km, kant,
                    alpha=40.):
@@ -150,20 +164,29 @@ def prospect_d(N, cab, car, cbrown, cw, cm, ant,
     b       = (1-rq+tq+D)/(2*t)
 
     bNm1    = jnp.power(b, N-1)
-    bN2     = bNm1*bNm1
-    a2      = a*a
-    denom   = a2*bN2-1
-    Rsub    = a*(bN2-1)/denom
-    Tsub    = bNm1*(a2-1)/denom
+    bN2     = bNm1 * bNm1
+    a2      = a * a
+    denom   = a2 * bN2 - 1
+    Rsub    = a*(bN2 - 1)/denom
+    Tsub    = bNm1*(a2 - 1)/denom
 
-    # Case of zero absorption
-    j       = r+t >= 1.
-    Tsub[j] = t[j]/(t[j]+(1-t[j])*(N-1))
-    Rsub[j] = 1-Tsub[j]
+    # "Case of zero absorption" => We used to do:
+    # Tsub[j] = t[j]/(t[j]+(1-t[j])*(N-1))  etc.
 
-    # Reflectance and transmittance of the leaf: combine top layer with next N-1 layers
-    denom   = 1-Rsub*r
-    tran    = Ta*Tsub/denom
-    refl    = Ra+Ta*Rsub*t/denom
+    # Instead, define the boolean mask "j"
+    j = (r + t) >= 1.
+
+    # We'll build new Tsub for the 'j' positions:
+    new_Tsub = t / (t + (1 - t) * (N - 1))
+    # Then update Tsub elementwise
+    Tsub = jnp.where(j, new_Tsub, Tsub)
+
+    # Then update Rsub accordingly
+    Rsub = jnp.where(j, 1 - new_Tsub, Rsub)
+
+    # Now continue:
+    denom = 1 - Rsub * r
+    tran = Ta * Tsub / denom
+    refl = Ra + Ta * Rsub * t / denom
 
     return lambdas, refl, tran
