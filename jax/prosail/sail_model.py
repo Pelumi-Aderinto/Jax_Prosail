@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import numpy as np
+import jax.numpy as jnp
 
 from prosail import spectral_lib
 
@@ -241,11 +241,11 @@ def run_thermal_sail(lam,
     # Calculate the thermal emission from the different
     # components using Planck's Law
     top = (1.0e-6)*c1*(lam*1e-6)**(-5.)
-    Hc = top / ( np.exp ( c2/(lam*tveg))-1.)         # Shade leaves
-    Hh = top / ( np.exp ( c2/(lam*tveg_sunlit))-1.)  # Sunlit leaves
-    Hd = top / ( np.exp ( c2/(lam*tsoil))-1.)        # shade soil 
-    Hs = top / ( np.exp ( c2/(lam*tsoil_sunlit))-1.) # Sunlit soil
-    Hsky = top / ( np.exp ( c2/(lam*t_atm))-1.)      # Sky emission
+    Hc = top / ( jnp.exp ( c2/(lam*tveg))-1.)         # Shade leaves
+    Hh = top / ( jnp.exp ( c2/(lam*tveg_sunlit))-1.)  # Sunlit leaves
+    Hd = top / ( jnp.exp ( c2/(lam*tsoil))-1.)        # shade soil 
+    Hs = top / ( jnp.exp ( c2/(lam*tsoil_sunlit))-1.) # Sunlit soil
+    Hsky = top / ( jnp.exp ( c2/(lam*t_atm))-1.)      # Sky emission
     
     # Emissivity calculations
     if refl is not None and emv is None:
@@ -255,7 +255,7 @@ def run_thermal_sail(lam,
     
     [tss, too, tsstoo, rdd, tdd, rsd, tsd, rdo, tdo,
          rso, rsos, rsod, rddt, rsdt, rdot, rsodt, rsost, rsot,
-         gammasdf, gammasdb, gammaso] = foursail (refl, np.zeros_like(refl),  
+         gammasdf, gammasdb, gammaso] = foursail (refl, jnp.zeros_like(refl),  
                                                   lidfa, lidfb, typelidf, 
                                                   lai, hspot, 
                                                   tts, tto, psi, rsoil)
@@ -275,10 +275,10 @@ def run_thermal_sail(lam,
             (aeev*Hc + 
             gammasot*emv*(Hh-Hc) + 
             aees*Hd + 
-            tso*ems*(Hs-Hd)))/np.pi
+            tso*ems*(Hs-Hd)))/jnp.pi
     
-    dnoem1 = top/(Lw*np.pi)
-    Tbright = c2/(lam*np.log(dnoem1+1.0))
+    dnoem1 = top/(Lw*jnp.pi)
+    Tbright = c2/(lam*jnp.log(dnoem1+1.0))
     dir_em = 1.0 - rdot 
     return Lw, Tbright, dir_em
         

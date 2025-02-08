@@ -428,8 +428,8 @@ def foursail (rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
     elif lidftype == 2:
         lidf = campbell(lidfa, n_elements=18)
     else:
-        raise ValueError, \
-            "lidftype can only be 1 (Campbell) or 2 (ellipsoidal)"
+        raise ValueError(\
+            "lidftype can only be 1 (Campbell) or 2 (ellipsoidal)")
     #Calculate geometric factors associated with extinction and scattering
     #Initialise sums
     ks=0.
@@ -570,3 +570,22 @@ def foursail (rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
     return [tss,too,tsstoo,rdd,tdd,rsd,tsd,rdo,tdo,
           rso,rsos,rsod,rddt,rsdt,rdot,rsodt,rsost,rsot,gammasdf,gammasdb,gammaso]
 
+
+
+# rho    = np.array([0.05, 0.10, 0.15])
+# tau    = np.array([0.02, 0.03, 0.05])
+# rsoil  = np.array([0.3,  0.3,  0.3])
+
+# lidfa    = 1.0
+# lidfb    = 0.0
+# lidftype = 1   # Suppose we want verhoef_bimodal_jax
+# lai       = 3.0
+# hotspot   = 0.2
+# tts       = 30.0
+# tto       = 45.0
+# psi       = 10.0
+
+# results = foursail(rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
+#                        tts, tto, psi, rsoil)
+# # 'results' is a tuple of length 21 with each sub-result.
+# print("FourSAIL results (21 items):", results)

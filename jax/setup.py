@@ -65,7 +65,7 @@ setup(
     package_data={"prosail": ["*.txt"]},
     install_requires=[
         "numpy",
-        "torch",
+        "jax",
         "scipy",
         "pytest",
         "numba",

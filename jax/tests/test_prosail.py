@@ -38,6 +38,7 @@ def test_rsot_prosail5(datadir):
     rr = prosail.run_prosail(1.5, 40., 8., 0.0, 0.01, 0.009, 3., -0.35, 0.01,
                         30., 10., 0., typelidf=1, lidfb=-0.15, 
                         rsoil = 1., psoil=1., factor="SDR")
+    print(rsot)
     print(rr)
     assert np.allclose(rsot, rr, atol=0.01)
 
