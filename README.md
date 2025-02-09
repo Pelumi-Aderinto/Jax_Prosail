@@ -1,12 +1,3 @@
-<img src="https://www.nceo.ac.uk/wp-content/themes/nceo/assets/images//logos/img_logo_white.svg" width="180" align="right" />
-<img src="http://www.esa.int/esalogo/images/logotype/img_colorlogo_darkblue.gif" width="180" align="left" />
-
-<br/>
-<br/>
-<br/>
-
----
-
 # PROSAIL-JAX Python Bindings
 
 **Adapted from the original NumPy/Torch versions by [Pelumi Aderinto/Instadeep].**
@@ -81,14 +72,14 @@ canopy_refl = prosail.run_sail(
 )
 
 # 3) Run PROSAIL end-to-end:
-wv, R_canopy = prosail.run_prosail(
+reflectance = prosail.run_prosail(
     n=1.5, cab=40, car=8, cbrown=0.0, cw=0.01, cm=0.009,
     lai=3.0, lidfa=-0.35, lidfb=-0.15, rsoil=0.2, psoil=0.3, hspot=0.01,
     tts=30.0, tto=10.0, psi=0.0, typelidf=1
 )
 ~~~
 
-Most functions return a `(wavelengths, reflectance[, transmittance])` or a single reflectance array. The typical wavelength range is `[400..2500]` nm in steps of 1 nm.
+The typical wavelength range is `[400..2500]` nm in steps of 1 nm.
 
 ### Common Troubleshooting
 
