@@ -156,7 +156,9 @@ They use pytest to verify that our JAX PROSAIL implementation matches expected o
 
 ~~~bash
 pytest tests/
-~~~ This will execute the test suite, where you can see some example usages and confirm that the code runs correctly.
+~~~
+
+### This will execute the test suite, where you can see some example usages and confirm that the code runs correctly.
 ---
 
 ## Contributing and Issues
