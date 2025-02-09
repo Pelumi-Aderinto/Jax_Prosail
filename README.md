@@ -2,7 +2,7 @@
 
 **Adapted from the original NumPy/Torch versions by [Pelumi Aderinto/Instadeep].**
 
-This repository contains **JAX-based** Python code for the PROSPECT and SAIL (PROSAIL) leaf and canopy reflectance models. The original FORTRAN code was downloaded from [Jussieu](http://teledetection.ipgp.jussieu.fr/prosail/). We have reimplemented the functionality in Python + JAX. This code is useful for radiative transfer modeling in vegetation remote sensing, with automatic differentiation and GPU acceleration possibilities via JAX.
+This repository contains **JAX-based** Python code for the PROSPECT and SAIL (PROSAIL) leaf and canopy reflectance models. The original FORTRAN code was downloaded from [Jussieu](http://teledetection.ipgp.jussieu.fr/prosail/) and [jgomezdans](https://github.com/jgomezdans/prosail/tree/2.0.0alpha). We have reimplemented the functionality in Python + JAX. This code is useful for radiative transfer modeling in vegetation remote sensing, with automatic differentiation and GPU acceleration possibilities via JAX.
 
 **Key references**:
 - Original PROSPECT model: [Jacquemoud & Baret (1990), Jacquemoud et al. (2009)]
