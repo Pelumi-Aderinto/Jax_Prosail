@@ -5,9 +5,9 @@
 This repository contains **JAX-based** Python code for the PROSPECT and SAIL (PROSAIL) leaf and canopy reflectance models. The original FORTRAN code was downloaded from [Jussieu](http://teledetection.ipgp.jussieu.fr/prosail/). We have reimplemented the functionality in Python + JAX. This code is useful for radiative transfer modeling in vegetation remote sensing, with automatic differentiation and GPU acceleration possibilities via JAX.
 
 **Key references**:
-- Original PROSPECT model: [Jacquemoud & Baret (1990), Jacquemoud et al. (2009)](http://webdocs.dow.wur.nl/internet/grs/Workshops/Environmental_Applications_Imaging_Spectroscopy/12_Jacquemoud_Prospect/IEEE_Jacquemoud_PROSPECT.pdf)
-- Original SAIL model: [Verhoef (1984, 2007)](https://ieeexplore.ieee.org/document/4286259)
-- PROSAIL coupling: [Jacquemoud et al. (2009)](https://www.sciencedirect.com/science/article/pii/S0034425708003077)
+- Original PROSPECT model: [Jacquemoud & Baret (1990), Jacquemoud et al. (2009)]
+- Original SAIL model: [Verhoef (1984, 2007)]
+- PROSAIL coupling: [Jacquemoud et al. (2009)]
 
 ---
 
@@ -21,7 +21,7 @@ This repository contains **JAX-based** Python code for the PROSPECT and SAIL (PR
    ~~~
    This installs `prosail` in editable mode. You need:
 
-   `jax, jaxlib, numpy, scipy`
+   `jax, jaxlib, numpy, scipy` all detailed in the requirement.txt file in the jax folder
 
 ### Notes
 
