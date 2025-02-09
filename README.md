@@ -126,20 +126,8 @@ Below are the key **PROSAIL** parameters and typical ranges:
 
 **`typelidf=2`** means **ellipsoidal** distribution (Campbell’s parameterization), where `lidfa` stands for the mean leaf angle (0°=planophile, 90°=erectophile). `lidfb` is unused.
 
----
 
-## Soil Model
-
-A simple **linear mixture** approach:
-\[
-\rho_{\mathrm{soil}} = \text{rsoil} \cdot \Bigl( psoil \cdot \text{soil\_spectrum1} + (1 - psoil)\cdot \text{soil\_spectrum2}\Bigr).
-\]
-
-By default, a pair of “dry” and “wet” soil spectra are used if not provided. `psoil` controls how “wet” the soil is, and `rsoil` scales brightness.
-
----
-
-## Examples
+## Further example usage
 
 ~~~python
 import prosail
@@ -164,4 +152,3 @@ plt.show()
 1. **Pull requests** are welcome for bug fixes or enhancements.
 2. **Issues**: If you encounter shape mismatch, JAX tracer errors, or other problems, please open an issue with sample code.
 
-**Happy modeling!**
