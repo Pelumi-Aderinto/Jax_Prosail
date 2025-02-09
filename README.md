@@ -144,7 +144,19 @@ plt.plot(wv, leaf_trans, label="Leaf Transmittance")
 plt.legend()
 plt.show()
 ~~~
+---
 
+## Testing
+We provide two test scripts:
+
+1. test_prospect.py
+2. test_prosail.py
+They use pytest to verify that our JAX PROSAIL implementation matches expected outputs. From the project directory, run:
+
+~~~bash
+pytest tests/
+~~~
+This will execute the test suite, where you can see some example usages and confirm that the code runs correctly.
 ---
 
 ## Contributing and Issues
