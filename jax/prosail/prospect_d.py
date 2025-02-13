@@ -131,62 +131,149 @@ def refl_trans_one_layer (alpha, nr, tau):
 
 
 
-def prospect_d(N, cab, car, cbrown, cw, cm, ant,
-                   nr, kab, kcar, kbrown, kw, km, kant,
-                   alpha=40.):
+def prospect_d_check_shapes(spectra_list, expected_size):
+    """
+    Check that each spectrum in spectra_list has shape == (expected_size,).
+    Raises ValueError if not.
+    """
+    for spectrum in spectra_list:
+        if spectrum.shape[0] != expected_size:
+            raise ValueError("Leaf spectra don't have the right shape!")
 
-    lambdas = jnp.arange(400, 2501)  # wavelengths
+
+@jit
+def prospect_d_jit(N, cab, car, cbrown, cw, cm, ant,
+                   nr, kab, kcar, kbrown, kw, km, kant,
+                   alpha=40.0):
+    """
+    JIT-compatible version of PROSPECT-D.
+    Assumes spectra arrays all have the correct shape (2101) beforehand.
+    """
+    # Wavelengths: shape (2101,)
+    lambdas = jnp.arange(400, 2501)
     n_lambdas = lambdas.shape[0]
 
-    # Ensure leaf spectra have the correct shape
-    spectra_list = [nr, kab, kcar, kbrown, kw, km, kant]
-    n_elems_list = jnp.array([spectrum.shape[0] for spectrum in spectra_list])
+    # Sum of absorption coefficients
+    kall = (cab * kab + car * kcar + ant * kant
+            + cbrown * kbrown + cw * kw + cm * km) / N
 
-    if not jnp.all(n_elems_list == n_lambdas):
-        raise ValueError("Leaf spectra don't have the right shape!")
+    # Transmittance due to absorption
+    # "Case of zero absorption" handled via jnp.where
+    t1 = (1.0 - kall) * jnp.exp(-kall)
+    t2 = kall**2 * (-expi(-kall))  # uses the custom expi above
+    tau = jnp.where(kall > 0.0, t1 + t2, jnp.ones_like(kall))
 
-    kall = (cab * kab + car * kcar + ant * kant + cbrown * kbrown +
-            cw * kw + cm * km) / N
-
-    # Compute tau using jax.lax.cond for branch efficiency
-    t1 = (1 - kall) * jnp.exp(-kall)
-    t2 = kall ** 2 * (-expi(-kall))
-    tau = jnp.where(kall > 0, t1 + t2, jnp.ones_like(kall))
-
-    # Call the reflectance/transmittance function (must also be converted to JAX)
+    # Single-layer reflection/transmittance
     r, t, Ra, Ta, denom = refl_trans_one_layer(alpha, nr, tau)
 
-    # Stokes equations for multi-layer calculations
-    D = jnp.sqrt((1 + r + t) * (1 + r - t) * (1 - r + t) * (1 - r - t))
-    rq = r ** 2
-    tq = t ** 2
-    a       = (1+rq-tq+D)/(2*r)
-    b       = (1-rq+tq+D)/(2*t)
+    # Stokes equations for multi-layer
+    D = jnp.sqrt((1.0 + r + t) * (1.0 + r - t)
+                 * (1.0 - r + t) * (1.0 - r - t))
+    rq = r**2
+    tq = t**2
+    a = (1.0 + rq - tq + D) / (2.0 * r)
+    b = (1.0 - rq + tq + D) / (2.0 * t)
 
-    bNm1    = jnp.power(b, N-1)
-    bN2     = bNm1 * bNm1
-    a2      = a * a
-    denom   = a2 * bN2 - 1
-    Rsub    = a*(bN2 - 1)/denom
-    Tsub    = bNm1*(a2 - 1)/denom
+    bNm1 = b**(N - 1)
+    bN2 = bNm1 * bNm1
+    a2 = a * a
+    denom2 = a2 * bN2 - 1.0
+    Rsub = a * (bN2 - 1.0) / denom2
+    Tsub = bNm1 * (a2 - 1.0) / denom2
 
-    # "Case of zero absorption" => We used to do:
-    # Tsub[j] = t[j]/(t[j]+(1-t[j])*(N-1))  etc.
-
-    # Instead, define the boolean mask "j"
-    j = (r + t) >= 1.
-
-    # We'll build new Tsub for the 'j' positions:
-    new_Tsub = t / (t + (1 - t) * (N - 1))
-    # Then update Tsub elementwise
+    # "Case of zero absorption": where (r + t) >= 1
+    j = (r + t) >= 1.0
+    # new Tsub for the 'j' positions
+    new_Tsub = t / (t + (1.0 - t) * (N - 1))
+    # update Tsub elementwise
     Tsub = jnp.where(j, new_Tsub, Tsub)
+    # update Rsub accordingly
+    Rsub = jnp.where(j, 1.0 - new_Tsub, Rsub)
 
-    # Then update Rsub accordingly
-    Rsub = jnp.where(j, 1 - new_Tsub, Rsub)
-
-    # Now continue:
-    denom = 1 - Rsub * r
-    tran = Ta * Tsub / denom
-    refl = Ra + Ta * Rsub * t / denom
+    # Combine layers
+    denom3 = 1.0 - Rsub * r
+    tran = Ta * Tsub / denom3
+    refl = Ra + Ta * Rsub * t / denom3
 
     return lambdas, refl, tran
+
+# Example usage:
+def prospect_d(
+    N, cab, car, cbrown, cw, cm, ant,
+    nr, kab, kcar, kbrown, kw, km, kant,
+    alpha=40.0
+):
+    """
+    Public-facing function that first checks shapes, then calls the JIT function.
+    """
+    # 1) Make sure shapes are correct (not inside JIT).
+    #    We expect shape=(2101,) based on lambdas = arange(400,2501).
+    n_lambdas = 2101
+    spectra_list = [nr, kab, kcar, kbrown, kw, km, kant]
+    prospect_d_check_shapes(spectra_list, n_lambdas)
+
+    # 2) Call the jitted version
+    return prospect_d_jit(
+        N, cab, car, cbrown, cw, cm, ant,
+        nr, kab, kcar, kbrown, kw, km, kant, alpha
+    )
+
+# def prospect_d(N, cab, car, cbrown, cw, cm, ant,
+#                    nr, kab, kcar, kbrown, kw, km, kant,
+#                    alpha=40.):
+
+#     lambdas = jnp.arange(400, 2501)  # wavelengths
+#     n_lambdas = lambdas.shape[0]
+
+#     # Ensure leaf spectra have the correct shape
+#     spectra_list = [nr, kab, kcar, kbrown, kw, km, kant]
+#     n_elems_list = jnp.array([spectrum.shape[0] for spectrum in spectra_list])
+
+#     if not jnp.all(n_elems_list == n_lambdas):
+#         raise ValueError("Leaf spectra don't have the right shape!")
+
+#     kall = (cab * kab + car * kcar + ant * kant + cbrown * kbrown +
+#             cw * kw + cm * km) / N
+
+#     # Compute tau using jax.lax.cond for branch efficiency
+#     t1 = (1 - kall) * jnp.exp(-kall)
+#     t2 = kall ** 2 * (-expi(-kall))
+#     tau = jnp.where(kall > 0, t1 + t2, jnp.ones_like(kall))
+
+#     # Call the reflectance/transmittance function (must also be converted to JAX)
+#     r, t, Ra, Ta, denom = refl_trans_one_layer(alpha, nr, tau)
+
+#     # Stokes equations for multi-layer calculations
+#     D = jnp.sqrt((1 + r + t) * (1 + r - t) * (1 - r + t) * (1 - r - t))
+#     rq = r ** 2
+#     tq = t ** 2
+#     a       = (1+rq-tq+D)/(2*r)
+#     b       = (1-rq+tq+D)/(2*t)
+
+#     bNm1    = jnp.power(b, N-1)
+#     bN2     = bNm1 * bNm1
+#     a2      = a * a
+#     denom   = a2 * bN2 - 1
+#     Rsub    = a*(bN2 - 1)/denom
+#     Tsub    = bNm1*(a2 - 1)/denom
+
+#     # "Case of zero absorption" => We used to do:
+#     # Tsub[j] = t[j]/(t[j]+(1-t[j])*(N-1))  etc.
+
+#     # Instead, define the boolean mask "j"
+#     j = (r + t) >= 1.
+
+#     # We'll build new Tsub for the 'j' positions:
+#     new_Tsub = t / (t + (1 - t) * (N - 1))
+#     # Then update Tsub elementwise
+#     Tsub = jnp.where(j, new_Tsub, Tsub)
+
+#     # Then update Rsub accordingly
+#     Rsub = jnp.where(j, 1 - new_Tsub, Rsub)
+
+#     # Now continue:
+#     denom = 1 - Rsub * r
+#     tran = Ta * Tsub / denom
+#     refl = Ra + Ta * Rsub * t / denom
+
+#     return lambdas, refl, tran
