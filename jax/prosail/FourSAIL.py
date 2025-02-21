@@ -270,7 +270,7 @@ def Jfunc1(k, l, t):
         Same shape as 'l', containing the piecewise-defined result.
     """
 
-        """
+    """
     Uses the exact derivative limit for k->l:  -t * exp(-l*t).
     """
     eps = 1e-7  # smaller threshold
