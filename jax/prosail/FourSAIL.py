@@ -269,22 +269,32 @@ def Jfunc1(k, l, t):
     result : jnp.ndarray or float
         Same shape as 'l', containing the piecewise-defined result.
     """
-    eps = 1e-3
-    del_ = (k - l) * t
-    # For the "normal" branch (|del_| > eps)
+
+        """
+    Uses the exact derivative limit for k->l:  -t * exp(-l*t).
+    """
+    eps = 1e-7  # smaller threshold
     normal_branch = (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
+    limit_branch  = t * jnp.exp(-l * t)
+    # Switch branches if |k-l| < eps
+    result = jnp.where(jnp.abs(k - l) < eps, limit_branch, normal_branch)
 
-    # For the "near-singular" branch (|del_| <= eps)
-    near_singular_branch = (
-        0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
-    )
+    # eps = 1e-3
+    # del_ = (k - l) * t
+    # # For the "normal" branch (|del_| > eps)
+    # normal_branch = (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
 
-    # Piecewise selection
-    result = jnp.where(
-        jnp.abs(del_) > eps,
-        normal_branch,
-        near_singular_branch
-    )
+    # # For the "near-singular" branch (|del_| <= eps)
+    # near_singular_branch = (
+    #     0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
+    # )
+
+    # # Piecewise selection
+    # result = jnp.where(
+    #     jnp.abs(del_) > eps,
+    #     normal_branch,
+    #     near_singular_branch
+    # )
     return result
 
 
