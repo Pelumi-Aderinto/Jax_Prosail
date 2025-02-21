@@ -253,22 +253,8 @@ def hotspot_calculations(alf, lai, ko, ks):
 
     return tsstoo, sumint
 
-@jax.jit
-def Jfunc1(k, l, t):
-    """
-    J1 function with avoidance of the near-singularity problem.
 
-    Parameters
-    ----------
-    k : float or array
-    l : float or array
-    t : float or array
-
-    Returns
-    -------
-    result : jnp.ndarray or float
-        Same shape as 'l', containing the piecewise-defined result.
-    """
+def Jfunc1_element(k, l, t):
     eps = 1e-3
     del_ = (k - l) * t
 
@@ -278,26 +264,80 @@ def Jfunc1(k, l, t):
     def near_singular_branch(_):
         return 0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
 
-    return jax.lax.cond(jnp.abs(del_) > eps, normal_branch, near_singular_branch, operand=None)
+    return jax.lax.cond(jnp.abs(del_) > eps,
+                        normal_branch,
+                        near_singular_branch,
+                        operand=None)
+
+def Jfunc1_wrapper(k, l, t):
+    # Ensure inputs are at least 1D.
+    k_arr = jnp.atleast_1d(k)
+    l_arr = jnp.atleast_1d(l)
+    t_arr = jnp.atleast_1d(t)
+    
+    # Determine the common target shape from the inputs.
+    target_shape = jnp.broadcast_shapes(k_arr.shape, l_arr.shape, t_arr.shape)
+    
+    # Broadcast each input to the target shape.
+    k_arr = jnp.broadcast_to(k_arr, target_shape)
+    l_arr = jnp.broadcast_to(l_arr, target_shape)
+    t_arr = jnp.broadcast_to(t_arr, target_shape)
+    
+    # Apply the elementwise function using vmap.
+    result = jax.vmap(Jfunc1_element)(k_arr, l_arr, t_arr)
+    
+    # If the result is a single element array, extract the scalar.
+    if result.shape == (1,):
+        return result[0]
+    return result
+
+Jfunc1 = jax.jit(Jfunc1_wrapper)
+
+# @jax.jit
+# def Jfunc1(k, l, t):
+#     """
+#     J1 function with avoidance of the near-singularity problem.
+
+#     Parameters
+#     ----------
+#     k : float or array
+#     l : float or array
+#     t : float or array
+
+#     Returns
+#     -------
+#     result : jnp.ndarray or float
+#         Same shape as 'l', containing the piecewise-defined result.
+#     """
+#     eps = 1e-3
+#     del_ = (k - l) * t
+
+#     def normal_branch(_):
+#         return (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
+
+#     def near_singular_branch(_):
+#         return 0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
+
+#     return jax.lax.cond(jnp.abs(del_) > eps, normal_branch, near_singular_branch, operand=None)
 
 
-    # eps = 1e-3
-    # del_ = (k - l) * t
-    # # For the "normal" branch (|del_| > eps)
-    # normal_branch = (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
+#     # eps = 1e-3
+#     # del_ = (k - l) * t
+#     # # For the "normal" branch (|del_| > eps)
+#     # normal_branch = (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
 
-    # # For the "near-singular" branch (|del_| <= eps)
-    # near_singular_branch = (
-    #     0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
-    # )
+#     # # For the "near-singular" branch (|del_| <= eps)
+#     # near_singular_branch = (
+#     #     0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
+#     # )
 
-    # # Piecewise selection
-    # result = jnp.where(
-    #     jnp.abs(del_) > eps,
-    #     normal_branch,
-    #     near_singular_branch
-    # )
-    # return result
+#     # # Piecewise selection
+#     # result = jnp.where(
+#     #     jnp.abs(del_) > eps,
+#     #     normal_branch,
+#     #     near_singular_branch
+#     # )
+#     # return result
 
 
 @jax.jit
