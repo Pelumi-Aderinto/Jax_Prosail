@@ -269,15 +269,17 @@ def Jfunc1(k, l, t):
     result : jnp.ndarray or float
         Same shape as 'l', containing the piecewise-defined result.
     """
+    eps = 1e-3
+    del_ = (k - l) * t
 
-    """
-    Uses the exact derivative limit for k->l:  -t * exp(-l*t).
-    """
-    eps = 1e-7  # smaller threshold
-    normal_branch = (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
-    limit_branch  = t * jnp.exp(-l * t)
-    # Switch branches if |k-l| < eps
-    result = jnp.where(jnp.abs(k - l) < eps, limit_branch, normal_branch)
+    def normal_branch(_):
+        return (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
+
+    def near_singular_branch(_):
+        return 0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
+
+    return jax.lax.cond(jnp.abs(del_) > eps, normal_branch, near_singular_branch, operand=None)
+
 
     # eps = 1e-3
     # del_ = (k - l) * t
@@ -295,7 +297,7 @@ def Jfunc1(k, l, t):
     #     normal_branch,
     #     near_singular_branch
     # )
-    return result
+    # return result
 
 
 @jax.jit
