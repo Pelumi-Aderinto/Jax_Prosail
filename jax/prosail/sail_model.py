@@ -168,8 +168,9 @@ def run_prosail_sail_jax(
         # user must have provided rsoil & psoil
         if (rsoil is None) or (psoil is None):
             raise ValueError("If rsoil0 is not defined, then rsoil and psoil must be defined.")
-        rsoil_val = float(rsoil)
-        psoil_val = float(psoil)
+        rsoil_val = jnp.asarray(rsoil, dtype=jnp.float32)
+        psoil_val = jnp.asarray(psoil, dtype=jnp.float32)
+
 
     # 2) We need the correct PROSPECT spectral data:
     #    If version='5', we use spectral_lib.prospect5.*,
