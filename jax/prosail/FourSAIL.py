@@ -706,17 +706,14 @@ def foursail(rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
     alf = jnp.where(hotspot > 0.0,
                     (dso / hotspot) * 2.0 / (ks + ko),
                     alf_init)
-    
-    # Now, use vmap to apply hotspot_cond for each sample.
-    # We assume alf and lai are shaped (B,1) so we extract the scalar value per sample.
+    alf_batch = ensure_batch(alf)
+    lai_batch = ensure_batch(lai)
     tsstoo_yes, sumint = jax.vmap(hotspot_cond)(
-        alf[:, 0],   # each sample's alf as scalar
-        lai[:, 0],   # each sample's lai as scalar
-        ko,          # assuming shape (B,) or broadcastable
-        ks           # same as above
+        alf_batch[:, 0],
+        lai_batch[:, 0],
+        ko,
+        ks
     )
-
-
 
     # tsstoo_yes, sumint = jax.lax.cond(
     #     jnp.isclose(alf, 0.0, atol=1e-15),
