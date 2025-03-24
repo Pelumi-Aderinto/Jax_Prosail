@@ -672,25 +672,58 @@ def foursail(rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
     gammasod_yes = (T4 + T5 - T6) / (1.0 - rinf**2)
 
     # Hotspot
+    # alf_init = 1e36
+    # alf = jnp.where(hotspot > 0.0,
+    #                 (dso / hotspot) * 2.0 / (ks + ko),
+    #                 alf_init)
+
+    # def pure_hotspot(_):
+    #     tss_   = jnp.exp(-ks * lai)
+    #     sumint = (1.0 - tss_) / (ks * lai)
+    #     return (tss_, sumint)
+
+    # def outside_hotspot(_):
+    #     return hotspot_calculations(alf, lai, ko, ks)
+
+    def hotspot_cond(alf_i, lai_i, ko_i, ks_i):
+        # alf_i, lai_i, ko_i, ks_i are scalars for one sample.
+        def pure_hotspot(_):
+            tss_   = jnp.exp(-ks_i * lai_i)
+            sumint = (1.0 - tss_) / (ks_i * lai_i)
+            return (jnp.atleast_1d(tss_), jnp.atleast_1d(sumint))
+        def outside_hotspot(_):
+            return hotspot_calculations(alf_i, lai_i, ko_i, ks_i)
+        return lax.cond(
+            jnp.isclose(alf_i, 0.0, atol=1e-15),
+            pure_hotspot,
+            outside_hotspot,
+            operand=None)
+
+    # Compute alf for each sample.
     alf_init = 1e36
+    # Note: Here, hotspot is assumed to be a scalar or broadcastable value.
+    # This line computes a new alf with the same shape as the batch.
     alf = jnp.where(hotspot > 0.0,
                     (dso / hotspot) * 2.0 / (ks + ko),
                     alf_init)
-
-    def pure_hotspot(_):
-        tss_   = jnp.exp(-ks * lai)
-        sumint = (1.0 - tss_) / (ks * lai)
-        return (tss_, sumint)
-
-    def outside_hotspot(_):
-        return hotspot_calculations(alf, lai, ko, ks)
-
-    tsstoo_yes, sumint = jax.lax.cond(
-        jnp.isclose(alf, 0.0, atol=1e-15),
-        pure_hotspot,
-        outside_hotspot,
-        operand=None
+    
+    # Now, use vmap to apply hotspot_cond for each sample.
+    # We assume alf and lai are shaped (B,1) so we extract the scalar value per sample.
+    tsstoo_yes, sumint = jax.vmap(hotspot_cond)(
+        alf[:, 0],   # each sample's alf as scalar
+        lai[:, 0],   # each sample's lai as scalar
+        ko,          # assuming shape (B,) or broadcastable
+        ks           # same as above
     )
+
+
+
+    # tsstoo_yes, sumint = jax.lax.cond(
+    #     jnp.isclose(alf, 0.0, atol=1e-15),
+    #     pure_hotspot,
+    #     outside_hotspot,
+    #     operand=None
+    # )
 
     rsos_yes    = w * lai * sumint
     gammasos_yes= ko * lai * sumint
