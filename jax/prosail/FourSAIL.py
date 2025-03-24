@@ -292,7 +292,10 @@ def ensure_batch(x):
     x = jnp.asarray(x)
     if x.ndim == 0:
         x = x[None]
+    elif x.ndim > 1:
+        x = x.reshape(x.shape[0])
     return x
+
 
 ##########################################
 # Batched Campbell Function (supports scalar too)
@@ -527,7 +530,7 @@ def foursail(rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
     # Assume all samples have the same lidftype.
     # lidftype_scalar = jnp.asscalar(lidftype)  # or use jnp.asscalar(lidftype) if it's 0-d
     # lidftype_scalar = lidftype.item()
-    
+    lidftype = int(lidftype)
     lidf = jax.lax.cond(
         lidftype == 1,
         lambda _: verhoef_bimodal(lidfa, lidfb, 18),
