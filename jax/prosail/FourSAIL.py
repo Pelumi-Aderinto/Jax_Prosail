@@ -230,6 +230,7 @@ def hotspot_calculations(alf, lai, ko, ks):
     sumint = jnp.where(jnp.isnan(sumint), 0.0, sumint)
     return tsstoo, sumint
 
+# Elementwise function operating on scalars.
 def Jfunc1_element(k, l, t):
     eps = 1e-3
     del_ = (k - l) * t
@@ -238,33 +239,44 @@ def Jfunc1_element(k, l, t):
         return (jnp.exp(-l * t) - jnp.exp(-k * t)) / (k - l)
 
     def near_singular_branch(_):
-        return 0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_**2) / 12.0)
+        return 0.5 * t * (jnp.exp(-k * t) + jnp.exp(-l * t)) * (1.0 - (del_ ** 2) / 12.0)
 
-    return jax.lax.cond(jnp.abs(del_) > eps,
-                        normal_branch,
-                        near_singular_branch,
-                        operand=None)
+    # Use lax.cond so that only the chosen branch is computed.
+    return lax.cond(jnp.abs(del_) > eps,
+                    normal_branch,
+                    near_singular_branch,
+                    operand=None)
 
+# Wrapper to allow Jfunc1_element to work on arbitrarily shaped inputs.
 def Jfunc1_wrapper(k, l, t):
+    """
+    Jfunc1_wrapper applies Jfunc1_element elementwise.
+    It broadcasts inputs k, l, t to a common shape, flattens them,
+    applies vmap over scalars, and reshapes the result back.
+    """
     # Ensure inputs are at least 1D.
     k_arr = jnp.atleast_1d(k)
     l_arr = jnp.atleast_1d(l)
     t_arr = jnp.atleast_1d(t)
-    
-    # Determine the common target shape from the inputs.
+
+    # Determine the common target shape.
     target_shape = jnp.broadcast_shapes(k_arr.shape, l_arr.shape, t_arr.shape)
-    
+
     # Broadcast each input to the target shape.
     k_arr = jnp.broadcast_to(k_arr, target_shape)
     l_arr = jnp.broadcast_to(l_arr, target_shape)
     t_arr = jnp.broadcast_to(t_arr, target_shape)
-    
-    # Apply the elementwise function using vmap.
-    result = jax.vmap(Jfunc1_element)(k_arr, l_arr, t_arr)
-    
-    # If the result is a single element array, extract the scalar.
-    if result.shape == (1,):
-        return result[0]
+
+    # Flatten the arrays.
+    flat_k = k_arr.ravel()
+    flat_l = l_arr.ravel()
+    flat_t = t_arr.ravel()
+
+    # Apply Jfunc1_element to each scalar triple.
+    flat_result = jax.vmap(Jfunc1_element)(flat_k, flat_l, flat_t)
+
+    # Reshape the flat result back to the target shape.
+    result = flat_result.reshape(target_shape)
     return result
 
 Jfunc1 = jax.jit(Jfunc1_wrapper)
