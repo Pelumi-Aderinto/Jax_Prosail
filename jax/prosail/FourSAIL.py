@@ -463,7 +463,8 @@ def verhoef_bimodal(a, b, n_elements=18):
 
 
 
-@jax.jit
+# @jax.jit
+@partial(jax.jit, static_argnums=(4,))
 def foursail(rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
                     tts, tto, psi, rsoil):
     """
