@@ -301,7 +301,7 @@ def ensure_batch(x):
 # Batched Campbell Function (supports scalar too)
 ##########################################
 @partial(jax.jit, static_argnums=(1,))
-def campbell_batched(alpha, n_elements=18):
+def campbell_batch(alpha, n_elements=18):
     """
     Batched JAX version of Campbell's ellipsoidal LIDF.
     
@@ -400,7 +400,7 @@ def campbell_batched(alpha, n_elements=18):
 # Batched Verhoef-Bimodal Function (supports scalar too)
 ##########################################
 @partial(jax.jit, static_argnums=(2,))
-def verhoef_bimodal_batched(a, b, n_elements=18):
+def verhoef_bimodal_batch(a, b, n_elements=18):
     """
     Batched JAX version of Verhoef's bimodal LIDF.
     
