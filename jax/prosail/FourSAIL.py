@@ -536,7 +536,17 @@ def foursail(rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
     # LIDF
     # For example, we might do an if-lidftype check once outside or always call verhoef_bimodal:
     # If you truly have different LIDF shapes, you'd either unify them or keep them scalar, etc.
-    lidf = campbell(lidfa, 18)
+    # Assume all samples have the same lidftype.
+    lidftype_scalar = lidftype[0]  # or use jnp.asscalar(lidftype) if it's 0-d
+    
+    lidf = jax.lax.cond(
+        lidftype_scalar == 1,
+        lambda _: verhoef_bimodal(lidfa, lidfb, 18),
+        lambda _: campbell(lidfa, 18),
+        operand=None
+    )
+
+    # lidf = campbell(lidfa, 18)
     # lidf = jax.lax.cond(
     #     lidftype == 1,
     #     lambda _: verhoef_bimodal(lidfa, lidfb, 18),
