@@ -286,105 +286,37 @@ def Jfunc2(k, l, t):
     """
     return (1.0 - jnp.exp(-(k + l) * t)) / (k + l)
 
-@partial(jax.jit, static_argnums=(2,))
-def verhoef_bimodal(a, b, n_elements=18):
-    """
-    Batched JAX version of Verhoef's bimodal LIDF.
-    
-    Parameters
-    ----------
-    a : jnp.ndarray
-        Controls the average leaf slope, shape (B,).
-    b : jnp.ndarray
-        Controls the distribution's bimodality, shape (B,).
-        (Assume |a| + |b| < 1 for physical meaningfulness.)
-    n_elements : int, optional
-        Number of equally spaced inclination angles (default 18).
-        
-    Returns
-    -------
-    lidf : jnp.ndarray
-        Batched LIDF of shape (B, n_elements) where each row sums to 1.
-    """
-    # a and b: shape (B,)
-    B = a.shape[0]
-    # Create the descending angles (in degrees) for the bins
-    step = 90.0 / n_elements
-    angles = jnp.flip(jnp.arange(n_elements) * step)  # shape (n_elements,)
 
-    # Define a batched compute_f that computes f for each batch element given a scalar angle.
-    def compute_f(angle, a, b):
-        tl1 = jnp.radians(angle)  # scalar
-        # If branch: same value for all batches (then broadcast)
-        f_if = 1.0 - jnp.cos(tl1)
-        f_if = jnp.full(a.shape, f_if)  # shape (B,)
+# Helper function: ensure input has at least one batch dimension.
+def ensure_batch(x):
+    x = jnp.asarray(x)
+    if x.ndim == 0:
+        x = x[None]
+    return x
 
-        # Else branch: perform a fixed number of iterations with lax.fori_loop
-        def else_branch(_):
-            eps = 1e-8
-            max_iter = 100
-            # x0 = 2.0 * tl1 (scalar) broadcasted to batch:
-            x = jnp.full(a.shape, 2.0 * tl1)  # shape (B,)
-            p = x
-            delx = jnp.ones_like(x)
-            y = jnp.zeros_like(x)
-            # Fixed loop over iterations:
-            def body_fun(iter, state):
-                x, delx, y = state
-                new_y = a * jnp.sin(x) + 0.5 * b * jnp.sin(2.0 * x)
-                dx = 0.5 * (new_y - x + p)
-                new_x = x + dx
-                new_delx = jnp.abs(dx)
-                return (new_x, new_delx, new_y)
-            x, delx, y = lax.fori_loop(0, max_iter, body_fun, (x, delx, y))
-            return (2.0 * y + p) / jnp.pi  # shape (B,)
-        
-        # Use elementwise selection: if a > 1.0 then use f_if else use f_else.
-        f_else = else_branch(None)
-        return jnp.where(a > 1.0, f_if, f_else)  # shape (B,)
-
-    # Initialize loop state: freq (per batch) and lidf (per batch, per bin)
-    freq_init = jnp.full((B,), 1.0)             # shape (B,)
-    lidf_init = jnp.zeros((B, n_elements))        # shape (B, n_elements)
-
-    # Loop over the n_elements indices.
-    def body_fun(i, carry):
-        freq, lidf = carry  # freq: shape (B,), lidf: shape (B, n_elements)
-        angle = angles[i]   # scalar
-        f = compute_f(angle, a, b)  # shape (B,)
-        # Set the i-th column (for each batch element) to (freq - f)
-        lidf = lidf.at[:, i].set(freq - f)
-        # Update freq for next iteration:
-        return (f, lidf)
-    
-    _, lidf_out = lax.fori_loop(0, n_elements, body_fun, (freq_init, lidf_init))
-    # Reverse along the inclination dimension (axis 1) as in the original code
-    lidf_out = lidf_out[:, ::-1]
-    return lidf_out
-
-
-
+##########################################
+# Batched Campbell Function (supports scalar too)
+##########################################
 @partial(jax.jit, static_argnums=(1,))
-def campbell(alpha, n_elements=18):
+def campbell_batched(alpha, n_elements=18):
     """
     Batched JAX version of Campbell's ellipsoidal LIDF.
     
     Parameters
     ----------
-    alpha : jnp.ndarray
-        Mean leaf angle in degrees, shape (B,).
+    alpha : jnp.ndarray or scalar
+        Mean leaf angle in degrees. If scalar, treated as a batch of one.
     n_elements : int, optional
         Number of equally spaced inclination angles (default 18).
         
     Returns
     -------
     lidf : jnp.ndarray
-        Leaf Inclination Distribution Function of shape (B, n_elements),
-        where each row sums to 1.
+        LIDF of shape (B, n_elements), where each row sums to 1.
     """
-    # alpha: shape (B,)
-    alpha = jnp.asarray(alpha)  # ensure array
+    alpha = ensure_batch(alpha)  # now shape (B,)
     B = alpha.shape[0]
+    
     # Compute excentricity factor per batch element; shape (B,)
     excent = jnp.exp(-1.6184e-5 * alpha**3 +
                        2.1145e-3 * alpha**2 -
@@ -399,7 +331,7 @@ def campbell(alpha, n_elements=18):
     # Compute tl1 and tl2 (in radians) for each bin; they are scalars
     tl1 = jnp.deg2rad(degrees[:-1])  # shape (n_elements,)
     tl2 = jnp.deg2rad(degrees[1:])   # shape (n_elements,)
-    # Expand to (1, n_elements) for broadcasting with batch
+    # Expand to (1, n_elements) for broadcasting with batch dimension
     tl1 = tl1[None, :]
     tl2 = tl2[None, :]
 
@@ -409,12 +341,10 @@ def campbell(alpha, n_elements=18):
 
     # Define branch for excent == 1 (elementwise)
     def freq_if_excent_eq_1(_):
-        # Returns same result for every batch element (will broadcast)
         return jnp.abs(jnp.cos(tl1) - jnp.cos(tl2))
     
-    # Define branch for excent != 1, split into two subcases:
+    # Define branch for excent != 1, with two subcases:
     def freq_if_excent_gt_1(_):
-        # For batch elements where excent > 1; shapes (B, n_elements)
         alph = excent / jnp.sqrt(jnp.abs(1.0 - excent**2))
         alph2 = alph**2
         x12 = x1**2
@@ -426,7 +356,6 @@ def campbell(alpha, n_elements=18):
         return jnp.abs(dum1 - dum2)
     
     def freq_if_excent_lt_1(_):
-        # For batch elements where excent < 1
         alph = excent / jnp.sqrt(jnp.abs(1.0 - excent**2))
         alph2 = alph**2
         x12 = x1**2
@@ -437,23 +366,97 @@ def campbell(alpha, n_elements=18):
         dum2 = x2 * almx2 + alph2 * jnp.arcsin(x2 / alph)
         return jnp.abs(dum1 - dum2)
     
-    # Combine the two subcases elementwise:
     def freq_if_excent_ne_1(_):
         freq_gt = freq_if_excent_gt_1(None)
         freq_lt = freq_if_excent_lt_1(None)
-        # Condition is evaluated per batch element; excent has shape (B,1) so it broadcasts
         mask = excent > 1.0
         return jnp.where(mask, freq_gt, freq_lt)
     
-    # Top-level: choose based on whether excent is close to 1
+    # Top-level selection: if excent is close to 1, use first branch; otherwise second.
     mask_eq = jnp.isclose(excent, 1.0, atol=1e-9, rtol=1e-9)
-    # Compute both branches (each yields shape (B, n_elements)) and select elementwise:
     freq_each = jnp.where(mask_eq, freq_if_excent_eq_1(None), freq_if_excent_ne_1(None))
     
-    # Normalize over the n_elements dimension for each batch element:
+    # Normalize frequency per batch element so that rows sum to 1
     sum0 = jnp.sum(freq_each, axis=1, keepdims=True)  # shape (B, 1)
     lidf = freq_each / sum0  # shape (B, n_elements)
     return lidf
+
+
+##########################################
+# Batched Verhoef-Bimodal Function (supports scalar too)
+##########################################
+@partial(jax.jit, static_argnums=(2,))
+def verhoef_bimodal_batched(a, b, n_elements=18):
+    """
+    Batched JAX version of Verhoef's bimodal LIDF.
+    
+    Parameters
+    ----------
+    a : jnp.ndarray or scalar
+        Controls the average leaf slope. If scalar, treated as batch of one.
+    b : jnp.ndarray or scalar
+        Controls the distribution's bimodality. If scalar, treated as batch of one.
+    n_elements : int, optional
+        Number of equally spaced inclination angles (default 18).
+        
+    Returns
+    -------
+    lidf : jnp.ndarray
+        LIDF of shape (B, n_elements) with each row summing to 1.
+    """
+    a = ensure_batch(a)  # shape (B,)
+    b = ensure_batch(b)  # shape (B,)
+    B = a.shape[0]
+    
+    # Create descending angles (in degrees)
+    step = 90.0 / n_elements
+    angles = jnp.flip(jnp.arange(n_elements) * step)  # shape (n_elements,)
+
+    # Define a batched compute_f that computes f for each batch element given a scalar angle.
+    def compute_f(angle, a, b):
+        tl1 = jnp.radians(angle)  # scalar
+        # "If" branch: same f for all batch elements (then broadcast)
+        f_if = 1.0 - jnp.cos(tl1)
+        f_if = jnp.full(a.shape, f_if)  # shape (B,)
+
+        # "Else" branch: use a fixed-iteration loop to compute a batched f.
+        def else_branch(_):
+            eps = 1e-8
+            max_iter = 100
+            x = jnp.full(a.shape, 2.0 * tl1)  # shape (B,)
+            p = x
+            delx = jnp.ones_like(x)
+            y = jnp.zeros_like(x)
+            def body_fun(iter, state):
+                x, delx, y = state
+                new_y = a * jnp.sin(x) + 0.5 * b * jnp.sin(2.0 * x)
+                dx = 0.5 * (new_y - x + p)
+                new_x = x + dx
+                new_delx = jnp.abs(dx)
+                return (new_x, new_delx, new_y)
+            x, delx, y = lax.fori_loop(0, max_iter, body_fun, (x, delx, y))
+            return (2.0 * y + p) / jnp.pi  # shape (B,)
+        
+        f_else = else_branch(None)
+        return jnp.where(a > 1.0, f_if, f_else)  # shape (B,)
+
+    # Initialize loop state: freq and lidf (batched)
+    freq_init = jnp.full((B,), 1.0)          # shape (B,)
+    lidf_init = jnp.zeros((B, n_elements))     # shape (B, n_elements)
+
+    def body_fun(i, carry):
+        freq, lidf = carry  # freq: (B,), lidf: (B, n_elements)
+        angle = angles[i]   # scalar
+        f = compute_f(angle, a, b)  # shape (B,)
+        # Set the i-th column for each batch element
+        lidf = lidf.at[:, i].set(freq - f)
+        return (f, lidf)
+    
+    _, lidf_out = lax.fori_loop(0, n_elements, body_fun, (freq_init, lidf_init))
+    # Reverse along the inclination angle dimension (axis 1)
+    lidf_out = lidf_out[:, ::-1]
+    return lidf_out
+
 
 
 
