@@ -709,8 +709,8 @@ def foursail(rho, tau, lidfa, lidfb, lidftype, lai, hotspot,
     alf_batch = ensure_batch(alf)
     lai_batch = ensure_batch(lai)
     tsstoo_yes, sumint = jax.vmap(hotspot_cond, in_axes=(0, 0, None, None))(
-        alf_batch[:, 0],
-        lai_batch[:, 0],
+        alf_batch,
+        lai_batch,
         ko,
         ks
     )
