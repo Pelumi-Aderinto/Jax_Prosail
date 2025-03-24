@@ -7,8 +7,16 @@ from jax import jit
 import jax
 from functools import partial
 
-# import numpy as np
-# import numba
+
+# Helper function: ensure input has at least one batch dimension.
+def ensure_batch(x):
+    x = jnp.asarray(x)
+    if x.ndim == 0:
+        x = x[None]
+    elif x.ndim > 1:
+        # If there’s an extra dimension, flatten it so that batch dimension is first.
+        x = x.reshape(x.shape[0])
+    return x
 
 
 @jax.jit
@@ -206,29 +214,64 @@ def define_geometric_constants(tts, tto, psi):
 def hotspot_calculations(alf, lai, ko, ks):
     """
     Performs hotspot calculations with an integration loop.
+    This version supports batched input.
+
+    Parameters
+    ----------
+    alf : float or jnp.ndarray
+        Parameter controlling hotspot scale. If scalar, treated as batch of one.
+    lai : float or jnp.ndarray
+        Leaf area index.
+    ko, ks : float or jnp.ndarray
+        Geometry-related parameters.
+
+    Returns
+    -------
+    tsstoo : jnp.ndarray
+        Hotspot-related reflectance term, shape (B,).
+    sumint : jnp.ndarray
+        Integrated hotspot term, shape (B,). Any NaN is replaced by 0.
     """
-    fhot = lai * jnp.sqrt(ko * ks)
-    
-    # Integration parameters and initial values
-    fint = (1.0 - jnp.exp(-alf)) * 0.05
-    x1, y1, f1, sumint = 0.0, 0.0, 1.0, 0.0
-    eps = 1e-10  # small epsilon to prevent division by zero
+    # Ensure all inputs are arrays of shape (B,)
+    alf = ensure_batch(alf)
+    lai = ensure_batch(lai)
+    ko  = ensure_batch(ko)
+    ks  = ensure_batch(ks)
+
+    # All variables now have shape (B,)
+    fhot = lai * jnp.sqrt(ko * ks)         # (B,)
+    fint = (1.0 - jnp.exp(-alf)) * 0.05      # (B,)
+
+    # Initialize integration state as arrays of shape (B,)
+    x1 = jnp.zeros_like(alf)
+    y1 = jnp.zeros_like(alf)
+    f1 = jnp.ones_like(alf)
+    sumint = jnp.zeros_like(alf)
+    eps = 1e-10
 
     def body_fun(istep, carry):
-        x1, y1, f1, sumint = carry
-        # Use jnp.where: for istep < 20 compute a specific value, else use 1.0
-        x2 = jnp.where(istep < 20, -jnp.log(1.0 - istep * fint) / alf, 1.0)
-        y2 = -(ko + ks) * lai * x2 + fhot * (1.0 - jnp.exp(-alf * x2)) / alf
-        f2 = jnp.exp(y2)
-        # Accumulate the integration sum; add eps to denominator to avoid division by zero.
+        x1, y1, f1, sumint = carry  # each of shape (B,)
+        # Use lax.cond to select the branch. Since istep is a scalar,
+        # we return an array of shape (B,) for both branches.
+        x2 = lax.cond(
+            istep < 20,
+            lambda _: -jnp.log(1.0 - istep * fint) / alf,
+            lambda _: jnp.ones_like(alf),
+            operand=None
+        )  # x2: (B,)
+        y2 = -(ko + ks) * lai * x2 + fhot * (1.0 - jnp.exp(-alf * x2)) / alf  # (B,)
+        f2 = jnp.exp(y2)  # (B,)
+        # Update integration: add term elementwise.
         sumint = sumint + (f2 - f1) * (x2 - x1) / (y2 - y1 + eps)
         return x2, y2, f2, sumint
 
-    # Run the loop for istep from 1 to 20 (inclusive)
+    # Run the integration loop for istep=1,...,20.
     x1, y1, f1, sumint = lax.fori_loop(1, 21, body_fun, (x1, y1, f1, sumint))
     tsstoo = f1
-    sumint = jnp.where(jnp.isnan(sumint), 0.0, sumint)
-    return tsstoo, sumint
+
+    # Replace NaNs in sumint with 0 elementwise.
+    fix_sumint = jax.vmap(lambda s: lax.cond(jnp.isnan(s), lambda _: 0.0, lambda _: s, operand=None))(sumint)
+    return tsstoo, fix_sumint
 
 # Elementwise function operating on scalars.
 def Jfunc1_element(k, l, t):
@@ -299,15 +342,6 @@ def Jfunc2(k, l, t):
     return (1.0 - jnp.exp(-(k + l) * t)) / (k + l)
 
 
-# Helper function: ensure input has at least one batch dimension.
-def ensure_batch(x):
-    x = jnp.asarray(x)
-    if x.ndim == 0:
-        x = x[None]
-    elif x.ndim > 1:
-        # If there’s an extra dimension, flatten it so that batch dimension is first.
-        x = x.reshape(x.shape[0])
-    return x
 
 ##########################################
 # Batched Campbell Function (supports scalar too)
